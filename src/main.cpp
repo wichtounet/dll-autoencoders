@@ -7,6 +7,7 @@
 
 #include <iostream>
 #include <chrono>
+#include <atomic>
 
 #include "dll/neural/dense_layer.hpp"
 #include "dll/dbn.hpp"
@@ -14,6 +15,68 @@
 
 #include "mnist/mnist_reader.hpp"
 #include "mnist/mnist_utils.hpp"
+
+namespace {
+
+constexpr const size_t K = 3;
+
+template<typename C>
+float distance_knn(const C& lhs, const C& rhs){
+    return etl::sum((lhs - rhs) >> (lhs - rhs));
+}
+
+struct distance_t {
+    float dist;
+    uint32_t label;
+};
+
+size_t vote_knn(const std::vector<distance_t>& distances){
+    size_t votes[10]{};
+
+    for(size_t k = 0; k < K; ++k){
+        ++votes[distances[k].label];
+    }
+
+    size_t label = 0;
+
+    for(size_t k = 1; k < 10; ++k){
+        if(votes[k] > votes[label]){
+            label = k;
+        }
+    }
+
+    return label;
+}
+
+template<typename C, typename L>
+double evaluate_knn(const C& training, const C& test, const L& training_labels, const L& test_labels){
+    std::atomic<size_t> correct;
+
+    correct = 0;
+
+    cpp::default_thread_pool<> pool(8);
+
+    cpp::parallel_foreach_n(pool, 0, test.size(), [&](const size_t i){
+        std::vector<distance_t> distances(training.size());
+
+        for(size_t j = 0; j < training.size(); ++j){
+            float d = distance_knn(test[i], training[j]);
+            distances[j] = {d, training_labels[j]};
+        }
+
+        std::sort(distances.begin(), distances.end(), [](const distance_t& lhs, const distance_t& rhs){
+            return lhs.dist < rhs.dist;
+        });
+
+        if(vote_knn(distances) == test_labels[i]){
+            ++correct;
+        }
+    });
+
+    return correct / double(test.size());
+}
+
+} // end of anonymous
 
 int main(int argc, char* argv []) {
     std::string model = "raw";
@@ -24,7 +87,8 @@ int main(int argc, char* argv []) {
     auto dataset = mnist::read_dataset_direct<std::vector, etl::dyn_vector<float>>();
 
     if(model == "raw"){
-        //TODO
+        double accuracy = evaluate_knn(dataset.training_images, dataset.test_images, dataset.training_labels, dataset.test_labels);
+        std::cout << "Raw: " << accuracy << std::endl;
     } else if(model == "test"){
         mnist::binarize_dataset(dataset);
 
