@@ -1,0 +1,6 @@
+[submodule "make-utils"]
+	path = make-utils
+	url = https://github.com/wichtounet/make-utils
+[submodule "dll"]
+	path = dll
+	url = https://github.com/wichtounet/dll
