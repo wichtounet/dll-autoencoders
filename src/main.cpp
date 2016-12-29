@@ -76,6 +76,23 @@ double evaluate_knn(const C& training, const C& test, const L& training_labels, 
     return correct / double(test.size());
 }
 
+template<size_t I, typename N, typename D>
+double evaluate_knn_net(const N& net, const D& dataset){
+
+    std::vector<etl::dyn_vector<float>> training(dataset.training_images.size());
+    std::vector<etl::dyn_vector<float>> test(dataset.test_images.size());
+
+    for(std::size_t i = 0; i < training.size(); ++i){
+        training[i] = net->template features_sub<I>(dataset.training_images[i]);
+    }
+
+    for(std::size_t i = 0; i < test.size(); ++i){
+        test[i] = net->template features_sub<I>(dataset.test_images[i]);
+    }
+
+    return evaluate_knn(training, test, dataset.training_labels, dataset.test_labels);
+}
+
 } // end of anonymous
 
 int main(int argc, char* argv []) {
@@ -89,30 +106,32 @@ int main(int argc, char* argv []) {
     if(model == "raw"){
         double accuracy = evaluate_knn(dataset.training_images, dataset.test_images, dataset.training_labels, dataset.test_labels);
         std::cout << "Raw: " << accuracy << std::endl;
-    } else if(model == "test"){
+    } else if(model == "dense"){
         mnist::binarize_dataset(dataset);
 
-        using dbn_t = dll::dbn_desc<
-            dll::dbn_layers<
-            dll::dense_desc<28 * 28, 500>::layer_t,
-            dll::dense_desc<500, 250>::layer_t,
-            dll::dense_desc<250, 10, dll::activation<dll::function::SOFTMAX>>::layer_t>,
-            dll::momentum, dll::batch_size<100>, dll::trainer<dll::sgd_trainer>>::dbn_t;
+#define SINGLE_AE(N)                                                             \
+        {                                                                            \
+            using network_t =                                                        \
+                dll::dbn_desc<dll::dbn_layers<dll::dense_desc<28 * 28, N>::layer_t,  \
+                                              dll::dense_desc<N, 28 * 28>::layer_t>, \
+                              dll::momentum, dll::trainer<dll::sgd_trainer>,         \
+                              dll::batch_size<64>>::dbn_t;                           \
+            auto ae = std::make_unique<network_t>();                                 \
+            ae->display();                                                           \
+            ae->learning_rate    = 0.1;                                              \
+            ae->initial_momentum = 0.9;                                              \
+            ae->final_momentum   = 0.9;                                              \
+            auto ft_error        = ae->fine_tune_ae(dataset.training_images, 50);    \
+            std::cout << "ft_error:" << ft_error << std::endl;                       \
+            std::cout << "__result__: dense_ae_" << N << ":"                         \
+                      << evaluate_knn_net<1>(ae, dataset) << std::endl;              \
+        }
 
-        auto dbn = std::make_unique<dbn_t>();
-
-        dbn->learning_rate = 0.1;
-        dbn->initial_momentum = 0.9;
-        dbn->momentum = 0.9;
-        dbn->goal = -1.0; // Don't stop
-
-        dbn->display();
-
-        auto ft_error = dbn->fine_tune(dataset.training_images, dataset.training_labels, 50);
-        std::cout << "ft_error:" << ft_error << std::endl;
-
-        auto test_error = dll::test_set(dbn, dataset.test_images, dataset.test_labels, dll::predictor());
-        std::cout << "test_error:" << test_error << std::endl;
+        SINGLE_AE(200);
+        SINGLE_AE(400);
+        SINGLE_AE(600);
+        SINGLE_AE(800);
+        SINGLE_AE(1000);
     }
 
     return 0;
