@@ -2,8 +2,8 @@ default: release
 
 .PHONY: default release debug all clean
 
-include ../make-utils/flags.mk
-include ../make-utils/cpp-utils.mk
+include make-utils/flags.mk
+include make-utils/cpp-utils.mk
 
 CXX_FLAGS += -pedantic -Werror -ftemplate-backtrace-limit=0
 
@@ -88,4 +88,4 @@ clean: base_clean
 
 -include tests.mk
 
-include ../make-utils/cpp-utils-finalize.mk
+include make-utils/cpp-utils-finalize.mk
