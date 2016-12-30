@@ -165,6 +165,7 @@ int main(int argc, char* argv[]) {
                       << evaluate_knn_net<1>(ae, dataset) << std::endl;               \
         }
 
+        SINGLE_RBM(50);
         SINGLE_RBM(100);
         SINGLE_RBM(200);
         SINGLE_RBM(400);
@@ -172,6 +173,7 @@ int main(int argc, char* argv[]) {
         SINGLE_RBM(800);
         SINGLE_RBM(1000);
 
+        SINGLE_AE(50);
         SINGLE_AE(100);
         SINGLE_AE(200);
         SINGLE_AE(400);
