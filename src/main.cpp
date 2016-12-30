@@ -129,45 +129,50 @@ int main(int argc, char* argv[]) {
     } else if (model == "dense") {
         mnist::binarize_dataset(dataset);
 
-#define SINGLE_RBM(N)                                                        \
-        {                                                                    \
-            using rbm_t = dll::rbm_desc<                                     \
-                28 * 28, N,                                                  \
-                dll::batch_size<100>,                                        \
-                dll::momentum>::layer_t;                                     \
-            auto rbm              = std::make_unique<rbm_t>();               \
-            rbm->learning_rate    = 0.1;                                     \
-            rbm->initial_momentum = 0.9;                                     \
-            rbm->final_momentum   = 0.9;                                     \
-            auto error            = rbm->train(dataset.training_images, 50); \
-            std::cout << "pretrain_error:" << error << std::endl;            \
-            std::cout << "__result__: dense_rbm_" << N << ":"                \
-                      << evaluate_knn_rbm(rbm, dataset) << std::endl;        \
+        static constexpr size_t epochs = 100;
+        static constexpr size_t batch_size = 100;
+
+#define SINGLE_RBM(N)                                                            \
+        {                                                                        \
+            using rbm_t = dll::rbm_desc<                                         \
+                28 * 28, N,                                                      \
+                dll::batch_size<batch_size>,                                     \
+                dll::momentum>::layer_t;                                         \
+            auto rbm              = std::make_unique<rbm_t>();                   \
+            rbm->learning_rate    = 0.1;                                         \
+            rbm->initial_momentum = 0.9;                                         \
+            rbm->final_momentum   = 0.9;                                         \
+            auto error            = rbm->train(dataset.training_images, epochs); \
+            std::cout << "pretrain_error:" << error << std::endl;                \
+            std::cout << "__result__: dense_rbm_" << N << ":"                    \
+                      << evaluate_knn_rbm(rbm, dataset) << std::endl;            \
         }
 
-#define SINGLE_AE(N)                                                                 \
-        {                                                                            \
-            using network_t =                                                        \
-                dll::dbn_desc<dll::dbn_layers<dll::dense_desc<28 * 28, N>::layer_t,  \
-                                              dll::dense_desc<N, 28 * 28>::layer_t>, \
-                              dll::momentum, dll::trainer<dll::sgd_trainer>,         \
-                              dll::batch_size<100>>::dbn_t;                           \
-            auto ae = std::make_unique<network_t>();                                 \
-            ae->learning_rate    = 0.1;                                              \
-            ae->initial_momentum = 0.9;                                              \
-            ae->final_momentum   = 0.9;                                              \
-            auto ft_error        = ae->fine_tune_ae(dataset.training_images, 50);    \
-            std::cout << "ft_error:" << ft_error << std::endl;                       \
-            std::cout << "__result__: dense_ae_" << N << ":"                         \
-                      << evaluate_knn_net<1>(ae, dataset) << std::endl;              \
+#define SINGLE_AE(N)                                                                  \
+        {                                                                             \
+            using network_t =                                                         \
+                dll::dbn_desc<dll::dbn_layers<dll::dense_desc<28 * 28, N>::layer_t,   \
+                                              dll::dense_desc<N, 28 * 28>::layer_t>,  \
+                              dll::momentum, dll::trainer<dll::sgd_trainer>,          \
+                              dll::batch_size<batch_size>>::dbn_t;                    \
+            auto ae              = std::make_unique<network_t>();                     \
+            ae->learning_rate    = 0.1;                                               \
+            ae->initial_momentum = 0.9;                                               \
+            ae->final_momentum   = 0.9;                                               \
+            auto ft_error        = ae->fine_tune_ae(dataset.training_images, epochs); \
+            std::cout << "ft_error:" << ft_error << std::endl;                        \
+            std::cout << "__result__: dense_ae_" << N << ":"                          \
+                      << evaluate_knn_net<1>(ae, dataset) << std::endl;               \
         }
 
+        SINGLE_RBM(100);
         SINGLE_RBM(200);
         SINGLE_RBM(400);
         SINGLE_RBM(600);
         SINGLE_RBM(800);
         SINGLE_RBM(1000);
 
+        SINGLE_AE(100);
         SINGLE_AE(200);
         SINGLE_AE(400);
         SINGLE_AE(600);
