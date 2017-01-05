@@ -95,6 +95,11 @@ double evaluate_knn_net(const N& net, const D& dataset) {
     return evaluate_knn(training, test, dataset.training_labels, dataset.test_labels);
 }
 
+template <size_t I, typename Net, typename D>
+void evaluate_net(size_t N, const Net& net, const D& dataset) {
+    std::cout << "__result__(KNN): dense_ae_" << N << ":" << evaluate_knn_net<I>(net, dataset) << std::endl;
+}
+
 template <typename R, typename D>
 double evaluate_knn_rbm(const R& rbm, const D& dataset) {
     std::vector<etl::dyn_vector<float>> training(dataset.training_images.size());
@@ -111,6 +116,11 @@ double evaluate_knn_rbm(const R& rbm, const D& dataset) {
     });
 
     return evaluate_knn(training, test, dataset.training_labels, dataset.test_labels);
+}
+
+template <typename R, typename D>
+void evaluate_rbm(size_t N, const R& rbm, const D& dataset) {
+    std::cout << "__result__: dense_rbm_" << N << ":" << evaluate_knn_rbm(rbm, dataset) << std::endl;
 }
 
 } // end of anonymous
@@ -144,8 +154,7 @@ int main(int argc, char* argv[]) {
             rbm->final_momentum   = 0.9;                                         \
             auto error            = rbm->train(dataset.training_images, epochs); \
             std::cout << "pretrain_error:" << error << std::endl;                \
-            std::cout << "__result__: dense_rbm_" << N << ":"                    \
-                      << evaluate_knn_rbm(rbm, dataset) << std::endl;            \
+            evaluate_rbm(N, rbm, dataset);                                       \
         }
 
 #define SINGLE_AE(N)                                                                  \
@@ -161,8 +170,7 @@ int main(int argc, char* argv[]) {
             ae->final_momentum   = 0.9;                                               \
             auto ft_error        = ae->fine_tune_ae(dataset.training_images, epochs); \
             std::cout << "ft_error:" << ft_error << std::endl;                        \
-            std::cout << "__result__: dense_ae_" << N << ":"                          \
-                      << evaluate_knn_net<1>(ae, dataset) << std::endl;               \
+            evaluate_net<1>(N, ae, dataset); \
         }
 
         SINGLE_RBM(50);
