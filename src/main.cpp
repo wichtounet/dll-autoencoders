@@ -17,6 +17,8 @@
 #include "mnist/mnist_reader.hpp"
 #include "mnist/mnist_utils.hpp"
 
+#include "nice_svm.hpp"
+
 namespace {
 
 constexpr const size_t K = 3;
@@ -77,6 +79,39 @@ double evaluate_knn(const C& training, const C& test, const L& training_labels, 
     return correct / double(test.size());
 }
 
+template <typename C, typename L>
+double evaluate_svm(C& training, C& test, L& training_labels, L& test_labels) {
+    auto training_problem = svm::make_problem(training_labels, training, 0, false);
+    auto test_problem = svm::make_problem(test_labels, test, 0, false);
+
+    auto mnist_parameters = svm::default_parameters();
+
+    mnist_parameters.svm_type = C_SVC;
+    mnist_parameters.kernel_type = RBF;
+    mnist_parameters.probability = 1;
+    mnist_parameters.C = 2.8;
+    mnist_parameters.gamma = 0.0073;
+
+    //Make it quiet
+    svm::make_quiet();
+
+    //Make sure parameters are not too messed up
+    if(!svm::check(training_problem, mnist_parameters)){
+        return 1;
+    }
+
+    svm::model model;
+    model = svm::train(training_problem, mnist_parameters);
+
+    std::cout << "Number of classes: " << model.classes() << std::endl;
+
+    std::cout << "Test on training set" << std::endl;
+    svm::test_model(training_problem, model);
+
+    std::cout << "Test on test set" << std::endl;
+    return svm::test_model(test_problem, model);
+}
+
 template <size_t I, typename N, typename D>
 double evaluate_knn_net(const N& net, const D& ds) {
     std::vector<etl::dyn_vector<float>> training(ds.training_images.size());
@@ -135,6 +170,7 @@ int main(int argc, char* argv[]) {
 
     if (model == "raw") {
         std::cout << "Raw(KNN): " << evaluate_knn(ds.training_images, ds.test_images, ds.training_labels, ds.test_labels) << std::endl;
+        std::cout << "Raw(SVM): " << evaluate_svm(ds.training_images, ds.test_images, ds.training_labels, ds.test_labels) << std::endl;
     } else if (model == "dense") {
         mnist::binarize_dataset(ds);
 

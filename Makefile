@@ -9,7 +9,7 @@ CXX_FLAGS += -pedantic -Werror -ftemplate-backtrace-limit=0
 
 RELEASE_FLAGS += -fno-rtti
 
-CXX_FLAGS += -Idll/include -Idll/etl/lib/include -Idll/etl/include/ -Idll/mnist/include/ -Inice_svm/include
+CXX_FLAGS +=  -Inice_svm/include -Idll/include -Idll/etl/lib/include -Idll/etl/include/ -Idll/mnist/include/
 LD_FLAGS += -lpthread -lsvm
 
 CXX_FLAGS += -DETL_PARALLEL -DETL_VECTORIZE_FULL
