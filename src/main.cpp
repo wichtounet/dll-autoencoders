@@ -78,49 +78,49 @@ double evaluate_knn(const C& training, const C& test, const L& training_labels, 
 }
 
 template <size_t I, typename N, typename D>
-double evaluate_knn_net(const N& net, const D& dataset) {
-    std::vector<etl::dyn_vector<float>> training(dataset.training_images.size());
-    std::vector<etl::dyn_vector<float>> test(dataset.test_images.size());
+double evaluate_knn_net(const N& net, const D& ds) {
+    std::vector<etl::dyn_vector<float>> training(ds.training_images.size());
+    std::vector<etl::dyn_vector<float>> test(ds.test_images.size());
 
     cpp::default_thread_pool<> pool(8);
 
     cpp::parallel_foreach_n(pool, 0, training.size(), [&](const size_t i) {
-        training[i] = net->template features_sub<I>(dataset.training_images[i]);
+        training[i] = net->template features_sub<I>(ds.training_images[i]);
     });
 
     cpp::parallel_foreach_n(pool, 0, test.size(), [&](const size_t i) {
-        test[i] = net->template features_sub<I>(dataset.test_images[i]);
+        test[i] = net->template features_sub<I>(ds.test_images[i]);
     });
 
-    return evaluate_knn(training, test, dataset.training_labels, dataset.test_labels);
+    return evaluate_knn(training, test, ds.training_labels, ds.test_labels);
 }
 
 template <size_t I, typename Net, typename D>
-void evaluate_net(size_t N, const Net& net, const D& dataset) {
-    std::cout << "__result__(KNN): dense_ae_" << N << ":" << evaluate_knn_net<I>(net, dataset) << std::endl;
+void evaluate_net(size_t N, const Net& net, const D& ds) {
+    std::cout << "__result__(KNN): dense_ae_" << N << ":" << evaluate_knn_net<I>(net, ds) << std::endl;
 }
 
 template <typename R, typename D>
-double evaluate_knn_rbm(const R& rbm, const D& dataset) {
-    std::vector<etl::dyn_vector<float>> training(dataset.training_images.size());
-    std::vector<etl::dyn_vector<float>> test(dataset.test_images.size());
+double evaluate_knn_rbm(const R& rbm, const D& ds) {
+    std::vector<etl::dyn_vector<float>> training(ds.training_images.size());
+    std::vector<etl::dyn_vector<float>> test(ds.test_images.size());
 
     cpp::default_thread_pool<> pool(8);
 
     cpp::parallel_foreach_n(pool, 0, training.size(), [&](const size_t i) {
-        training[i] = rbm->features(dataset.training_images[i]);
+        training[i] = rbm->features(ds.training_images[i]);
     });
 
     cpp::parallel_foreach_n(pool, 0, test.size(), [&](const size_t i) {
-        test[i] = rbm->features(dataset.test_images[i]);
+        test[i] = rbm->features(ds.test_images[i]);
     });
 
-    return evaluate_knn(training, test, dataset.training_labels, dataset.test_labels);
+    return evaluate_knn(training, test, ds.training_labels, ds.test_labels);
 }
 
 template <typename R, typename D>
-void evaluate_rbm(size_t N, const R& rbm, const D& dataset) {
-    std::cout << "__result__: dense_rbm_" << N << ":" << evaluate_knn_rbm(rbm, dataset) << std::endl;
+void evaluate_rbm(size_t N, const R& rbm, const D& ds) {
+    std::cout << "__result__: dense_rbm_" << N << ":" << evaluate_knn_rbm(rbm, ds) << std::endl;
 }
 
 } // end of anonymous
@@ -131,46 +131,45 @@ int main(int argc, char* argv[]) {
         model = argv[1];
     }
 
-    auto dataset = mnist::read_dataset_direct<std::vector, etl::dyn_vector<float>>();
+    auto ds = mnist::read_dataset_direct<std::vector, etl::dyn_vector<float>>();
 
     if (model == "raw") {
-        double accuracy = evaluate_knn(dataset.training_images, dataset.test_images, dataset.training_labels, dataset.test_labels);
-        std::cout << "Raw: " << accuracy << std::endl;
+        std::cout << "Raw(KNN): " << evaluate_knn(ds.training_images, ds.test_images, ds.training_labels, ds.test_labels) << std::endl;
     } else if (model == "dense") {
-        mnist::binarize_dataset(dataset);
+        mnist::binarize_dataset(ds);
 
         static constexpr size_t epochs = 100;
         static constexpr size_t batch_size = 100;
 
-#define SINGLE_RBM(N)                                                            \
-        {                                                                        \
-            using rbm_t = dll::rbm_desc<                                         \
-                28 * 28, N,                                                      \
-                dll::batch_size<batch_size>,                                     \
-                dll::momentum>::layer_t;                                         \
-            auto rbm              = std::make_unique<rbm_t>();                   \
-            rbm->learning_rate    = 0.1;                                         \
-            rbm->initial_momentum = 0.9;                                         \
-            rbm->final_momentum   = 0.9;                                         \
-            auto error            = rbm->train(dataset.training_images, epochs); \
-            std::cout << "pretrain_error:" << error << std::endl;                \
-            evaluate_rbm(N, rbm, dataset);                                       \
+#define SINGLE_RBM(N)                                                   \
+        {                                                                   \
+            using rbm_t = dll::rbm_desc<                                    \
+                28 * 28, N,                                                 \
+                dll::batch_size<batch_size>,                                \
+                dll::momentum>::layer_t;                                    \
+            auto rbm              = std::make_unique<rbm_t>();              \
+            rbm->learning_rate    = 0.1;                                    \
+            rbm->initial_momentum = 0.9;                                    \
+            rbm->final_momentum   = 0.9;                                    \
+            auto error            = rbm->train(ds.training_images, epochs); \
+            std::cout << "pretrain_error:" << error << std::endl;           \
+            evaluate_rbm(N, rbm, ds);                                       \
         }
 
-#define SINGLE_AE(N)                                                                  \
-        {                                                                             \
-            using network_t =                                                         \
-                dll::dbn_desc<dll::dbn_layers<dll::dense_desc<28 * 28, N>::layer_t,   \
-                                              dll::dense_desc<N, 28 * 28>::layer_t>,  \
-                              dll::momentum, dll::trainer<dll::sgd_trainer>,          \
-                              dll::batch_size<batch_size>>::dbn_t;                    \
-            auto ae              = std::make_unique<network_t>();                     \
-            ae->learning_rate    = 0.1;                                               \
-            ae->initial_momentum = 0.9;                                               \
-            ae->final_momentum   = 0.9;                                               \
-            auto ft_error        = ae->fine_tune_ae(dataset.training_images, epochs); \
-            std::cout << "ft_error:" << ft_error << std::endl;                        \
-            evaluate_net<1>(N, ae, dataset); \
+#define SINGLE_AE(N)                                                             \
+        {                                                                            \
+            using network_t =                                                        \
+                dll::dbn_desc<dll::dbn_layers<dll::dense_desc<28 * 28, N>::layer_t,  \
+                                              dll::dense_desc<N, 28 * 28>::layer_t>, \
+                              dll::momentum, dll::trainer<dll::sgd_trainer>,         \
+                              dll::batch_size<batch_size>>::dbn_t;                   \
+            auto ae              = std::make_unique<network_t>();                    \
+            ae->learning_rate    = 0.1;                                              \
+            ae->initial_momentum = 0.9;                                              \
+            ae->final_momentum   = 0.9;                                              \
+            auto ft_error        = ae->fine_tune_ae(ds.training_images, epochs);     \
+            std::cout << "ft_error:" << ft_error << std::endl;                       \
+            evaluate_net<1>(N, ae, ds);                                              \
         }
 
         SINGLE_RBM(50);
