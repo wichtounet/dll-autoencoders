@@ -23,6 +23,10 @@ namespace {
 
 constexpr const size_t K = 3;
 
+constexpr const bool KNN = false;
+constexpr const bool ANN = true;
+constexpr const bool SVM = false;
+
 template <typename C>
 float distance_knn(const C& lhs, const C& rhs) {
     return etl::sum((lhs - rhs) >> (lhs - rhs));
@@ -112,8 +116,24 @@ double evaluate_svm(C& training, C& test, L& training_labels, L& test_labels) {
     return svm::test_model(test_problem, model);
 }
 
-template <size_t I, typename N, typename D>
-double evaluate_knn_net(const N& net, const D& ds) {
+template <size_t N, typename C, typename L>
+double evaluate_ann(C& training, C& test, L& training_labels, L& test_labels) {
+    using network_t = typename dll::dbn_desc<
+        dll::dbn_layers<typename dll::dense_desc<N, 10, dll::activation<dll::function::SOFTMAX>>::layer_t>
+        , dll::trainer<dll::sgd_trainer>
+        , dll::batch_size<1000>
+    >::dbn_t;
+
+    auto ann              = std::make_unique<network_t>();
+    ann->learning_rate    = 0.001;
+    ann->display();
+    ann->fine_tune(training, training_labels, 50);
+
+    return 1.0 - dll::test_set(ann, test, test_labels, dll::predictor());
+}
+
+template <size_t I, size_t N, typename Net, typename D>
+void evaluate_net(Net& net, D& ds) {
     std::vector<etl::dyn_vector<float>> training(ds.training_images.size());
     std::vector<etl::dyn_vector<float>> test(ds.test_images.size());
 
@@ -127,16 +147,21 @@ double evaluate_knn_net(const N& net, const D& ds) {
         test[i] = net->template features_sub<I>(ds.test_images[i]);
     });
 
-    return evaluate_knn(training, test, ds.training_labels, ds.test_labels);
+    if(KNN){
+        std::cout << "__result__(KNN): dense_ae_" << N << ":" << evaluate_knn(training, test, ds.training_labels, ds.test_labels) << std::endl;
+    }
+
+    if(ANN){
+        std::cout << "__result__(ANN): dense_ae_" << N << ":" << evaluate_ann<N>(training, test, ds.training_labels, ds.test_labels) << std::endl;
+    }
+
+    if(SVM){
+        std::cout << "__result__(SVM): dense_ae_" << N << ":" << evaluate_svm(training, test, ds.training_labels, ds.test_labels) << std::endl;
+    }
 }
 
-template <size_t I, typename Net, typename D>
-void evaluate_net(size_t N, const Net& net, const D& ds) {
-    std::cout << "__result__(KNN): dense_ae_" << N << ":" << evaluate_knn_net<I>(net, ds) << std::endl;
-}
-
-template <typename R, typename D>
-double evaluate_knn_rbm(const R& rbm, const D& ds) {
+template <size_t N, typename R, typename D>
+void evaluate_rbm(R& rbm, D& ds) {
     std::vector<etl::dyn_vector<float>> training(ds.training_images.size());
     std::vector<etl::dyn_vector<float>> test(ds.test_images.size());
 
@@ -150,12 +175,17 @@ double evaluate_knn_rbm(const R& rbm, const D& ds) {
         test[i] = rbm->features(ds.test_images[i]);
     });
 
-    return evaluate_knn(training, test, ds.training_labels, ds.test_labels);
-}
+    if(KNN){
+        std::cout << "__result__(KNN): dense_rbm_" << N << ":" << evaluate_knn(training, test, ds.training_labels, ds.test_labels) << std::endl;
+    }
 
-template <typename R, typename D>
-void evaluate_rbm(size_t N, const R& rbm, const D& ds) {
-    std::cout << "__result__: dense_rbm_" << N << ":" << evaluate_knn_rbm(rbm, ds) << std::endl;
+    if(ANN){
+        std::cout << "__result__(ANN): dense_rbm_" << N << ":" << evaluate_ann<N>(training, test, ds.training_labels, ds.test_labels) << std::endl;
+    }
+
+    if(KNN){
+        std::cout << "__result__(SVM): dense_rbm_" << N << ":" << evaluate_svm(training, test, ds.training_labels, ds.test_labels) << std::endl;
+    }
 }
 
 } // end of anonymous
@@ -169,8 +199,17 @@ int main(int argc, char* argv[]) {
     auto ds = mnist::read_dataset_direct<std::vector, etl::dyn_vector<float>>();
 
     if (model == "raw") {
-        std::cout << "Raw(KNN): " << evaluate_knn(ds.training_images, ds.test_images, ds.training_labels, ds.test_labels) << std::endl;
-        std::cout << "Raw(SVM): " << evaluate_svm(ds.training_images, ds.test_images, ds.training_labels, ds.test_labels) << std::endl;
+        if(KNN){
+            std::cout << "Raw(KNN): " << evaluate_knn(ds.training_images, ds.test_images, ds.training_labels, ds.test_labels) << std::endl;
+        }
+
+        if(ANN){
+            std::cout << "Raw(ANN): " << evaluate_ann<784>(ds.training_images, ds.test_images, ds.training_labels, ds.test_labels) << std::endl;
+        }
+
+        if(SVM){
+            std::cout << "Raw(SVM): " << evaluate_svm(ds.training_images, ds.test_images, ds.training_labels, ds.test_labels) << std::endl;
+        }
     } else if (model == "dense") {
         mnist::binarize_dataset(ds);
 
@@ -189,7 +228,7 @@ int main(int argc, char* argv[]) {
             rbm->final_momentum   = 0.9;                                    \
             auto error            = rbm->train(ds.training_images, epochs); \
             std::cout << "pretrain_error:" << error << std::endl;           \
-            evaluate_rbm(N, rbm, ds);                                       \
+            evaluate_rbm<N>(rbm, ds);                                       \
         }
 
 #define SINGLE_AE(N)                                                             \
@@ -205,7 +244,7 @@ int main(int argc, char* argv[]) {
             ae->final_momentum   = 0.9;                                              \
             auto ft_error        = ae->fine_tune_ae(ds.training_images, epochs);     \
             std::cout << "ft_error:" << ft_error << std::endl;                       \
-            evaluate_net<1>(N, ae, ds);                                              \
+            evaluate_net<1, N>(ae, ds);                                              \
         }
 
         SINGLE_RBM(50);
